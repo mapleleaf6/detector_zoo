@@ -78,6 +78,13 @@ We provide links and instructions to download each pre-train model for CIFAR10 t
 * [resnet152](https://download.openmmlab.com/mmclassification/v0/resnet/resnet152_b16x8_cifar10_20210528-3e8e9178.pth)  rename it to 'resnet152_b16x8_cifar10.pth'
 * [densenet](https://www.dropbox.com/s/pnbvr16gnpyr1zg/densenet_cifar10.pth?dl=0)  rename it to  'densenet_cifar10.pth'
 
+Additionally, our project utilizes three Swin Transformer models. To extract features, you can execute the raw code available at the [Swin Transformer GitHub repository](https://github.com/microsoft/Swin-Transformer). The specific models we employ are listed below:
+* [swinv2_base_patch4_window12to16_192to256_22kto1k_ft](https://github.com/SwinTransformer/storage/releases/download/v2.0.0/swinv2_base_patch4_window12to16_192to256_22kto1k_ft.pth)
+* [swinv2_base_patch4_window12to24_192to384_22kto1k_ft](https://github.com/SwinTransformer/storage/releases/download/v2.0.0/swinv2_base_patch4_window12to24_192to384_22kto1k_ft.pth)
+* [swinv2_large_patch4_window12to16_192to256_22kto1k_ft](https://github.com/SwinTransformer/storage/releases/download/v2.0.0/swinv2_large_patch4_window12to16_192to256_22kto1k_ft.pth)
+
+These models are fine-tuned for optimal performance and are readily accessible for feature extraction tasks.
+
 
 ## Preliminaries
 It is tested under Ubuntu Linux 20.04 and Python 3.8 environment, and requries some packages to be installed:
