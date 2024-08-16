@@ -11,6 +11,7 @@ import sys
 from util import metrics
 import random
 import datetime
+from scipy.stats import chi2
 from sklearn.metrics import roc_auc_score
 torch.manual_seed(1)
 torch.cuda.manual_seed(1)
@@ -82,7 +83,7 @@ def cal_auc_by_score(known, novel):
     return auroc
 
 
-def fisher_method(p_value):
+def fisher_TD_method(p_value):
     num, dim = p_value.shape
 
     tmp = np.zeros(num)
@@ -93,7 +94,17 @@ def fisher_method(p_value):
     return p
 
 
-def fisher(args, ood_dataset, method,k):
+def fisher_ED_method(p_value):
+    num, dim = p_value.shape
+
+    tmp = np.zeros(num)
+    for i in range(dim):
+        tmp += np.log(p_value[:, i]+1e-100)
+    tmp *= -2
+    return tmp
+
+
+def fisher_TD(args, ood_dataset, method,k):
     p_value_in = []
     p_value_ood = []
     model_zoo = vars(args)[f"{args.in_dataset.replace('-','_')}_model_zoo"]
@@ -107,8 +118,8 @@ def fisher(args, ood_dataset, method,k):
         p_value_ood.append(p_value_dit['out_p'])
     p_value_in = np.array(p_value_in).T
     p_value_ood = np.array(p_value_ood).T
-    p_in = fisher_method(p_value_in)
-    p_ood = fisher_method(p_value_ood)
+    p_in = fisher_TD_method(p_value_in)
+    p_ood = fisher_TD_method(p_value_ood)
     TPR = sum(p_in >= 0.05) / len(p_in)
     FPR = sum(p_ood >= 0.05) / len(p_ood)
     AUROC = cal_auc_by_score(p_in, p_ood)
@@ -120,7 +131,42 @@ def fisher(args, ood_dataset, method,k):
     return result
 
 
-def cauchy_method(p_value):
+def fisher_ED(args, ood_dataset, method, k, alpha = 0.05):
+    p_value_in = []
+    p_value_ood = []
+    model_zoo = vars(args)[f"{args.in_dataset.replace('-','_')}_model_zoo"]
+    for model_name in model_zoo:
+        if method=='knn':
+            if not model_name.startswith('swin'):
+                p_value_dir = f"p-value/{args.in_dataset}/{ood_dataset}/{model_name}/p_value{k}.json"
+            else:
+                p_value_dir = f"/mnt/Swin-Transformer/p-value/{args.in_dataset}/{ood_dataset}/{model_name}/p_value{k}.json"
+        else:
+            p_value_dir = f"p-value/{method}/{args.in_dataset}/{ood_dataset}/{model_name}/p_value.json"
+        p_value_dit = read_data(p_value_dir)
+        p_value_in.append(p_value_dit['in_p'])
+        p_value_ood.append(p_value_dit['out_p'])
+    p_value_in = np.array(p_value_in).T
+    p_value_ood = np.array(p_value_ood).T
+
+
+    scores_in = -fisher_ED_method(p_value_in)
+    scores_ood_test = -fisher_ED_method(p_value_ood)
+
+    results, p_in, p_ood = metrics.cal_p_value(scores_in, scores_ood_test)
+    TPR = sum(p_in >= alpha) / len(p_in)
+    FPR = sum(p_ood >= alpha) / len(p_ood)
+    AUROC = cal_auc_by_score(p_in, p_ood)
+    result = {}
+    result['TPR'] = TPR
+    result['FPR'] = FPR
+    result['AUROC'] = AUROC
+    # print('model_zoo={}'.format(model_zoo))
+    return result
+
+
+
+def cauchy_TD_method(p_value):
     num, dim = p_value.shape
     tmp = np.zeros(num)
     for i in range(dim):
@@ -131,7 +177,17 @@ def cauchy_method(p_value):
 
     return p
 
-def cauchy(args, ood_dataset, method,k):
+
+def cauchy_ED_method(p_value):
+    num, dim = p_value.shape
+    tmp = np.zeros(num)
+    for i in range(dim):
+        tmp += np.tan((0.5-p_value[:, i])*np.pi)
+    tmp /= dim
+
+    return tmp
+
+def cauchy_TD(args, ood_dataset, method,k):
     p_value_in = []
     p_value_ood = []
     model_zoo = vars(args)[f"{args.in_dataset.replace('-','_')}_model_zoo"]
@@ -145,10 +201,43 @@ def cauchy(args, ood_dataset, method,k):
         p_value_ood.append(p_value_dit['out_p'])
     p_value_in = np.array(p_value_in).T
     p_value_ood = np.array(p_value_ood).T
-    p_in = cauchy_method(p_value_in)
-    p_ood = cauchy_method(p_value_ood)
+    p_in = cauchy_TD_method(p_value_in)
+    p_ood = cauchy_TD_method(p_value_ood)
     TPR = sum(p_in >= 0.05) / len(p_in)
     FPR = sum(p_ood >= 0.05) / len(p_ood)
+    AUROC = cal_auc_by_score(p_in, p_ood)
+    result = {}
+    result['TPR'] = TPR
+    result['FPR'] = FPR
+    result['AUROC'] = AUROC
+    # print('model_zoo={}'.format(model_zoo))
+    return result
+
+def cauchy_ED(args, ood_dataset, method, k, alpha = 0.05):
+    p_value_in = []
+    p_value_ood = []
+    model_zoo = vars(args)[f"{args.in_dataset.replace('-','_')}_model_zoo"]
+    for model_name in model_zoo:
+        if method=='knn':
+            if not model_name.startswith('swin'):
+                p_value_dir = f"p-value/{args.in_dataset}/{ood_dataset}/{model_name}/p_value{k}.json"
+            else:
+                p_value_dir = f"/mnt/Swin-Transformer/p-value/{args.in_dataset}/{ood_dataset}/{model_name}/p_value{k}.json"
+        else:
+            p_value_dir = f"p-value/{method}/{args.in_dataset}/{ood_dataset}/{model_name}/p_value.json"
+        p_value_dit = read_data(p_value_dir)
+        p_value_in.append(p_value_dit['in_p'])
+        p_value_ood.append(p_value_dit['out_p'])
+    p_value_in = np.array(p_value_in).T
+    p_value_ood = np.array(p_value_ood).T
+
+    scores_in = -cauchy_ED_method(p_value_in)
+    scores_ood_test = -cauchy_ED_method(p_value_ood)
+
+    results, p_in, p_ood = metrics.cal_p_value(scores_in, scores_ood_test)
+
+    TPR = sum(p_in >= alpha) / len(p_in)
+    FPR = sum(p_ood >= alpha) / len(p_ood)
     AUROC = cal_auc_by_score(p_in, p_ood)
     result = {}
     result['TPR'] = TPR
@@ -193,7 +282,7 @@ sys.stdout = Logger(os.path.join('llog', 'log of cal res {} by {}, k={}.txt'.for
 all_results = []
 for ood_dataset in args.out_datasets:
 
-    result = BH(args, ood_dataset, method, )
+    result = BH(args, ood_dataset, method, K)
     all_results.append(result)
     print('Result by BH when id is {} and ood is {} and k is {}'.format(args.in_dataset, ood_dataset, K))
     print(result)
@@ -204,23 +293,46 @@ print()
 
 all_results = []
 for ood_dataset in args.out_datasets:
-    result = cauchy(args, ood_dataset, method, k)
+    result = cauchy_TD(args, ood_dataset, method, K)
     all_results.append(result)
-    print('Result by Cauchy when id is {} and ood is {} and k is {}'.format(args.in_dataset, ood_dataset, K))
+    print('Result by cauchy_TD when id is {} and ood is {} and k is {}'.format(args.in_dataset, ood_dataset, K))
     print(result)
     print()
-metrics.print_results(all_results, args.out_datasets, f'cauchy+{method}+{k}')
+metrics.print_results(all_results, args.out_datasets, f'cauchy_TD+{method}+{K}')
 print()
 
 
 all_results = []
 for ood_dataset in args.out_datasets:
-    result = fisher(args, ood_dataset, method, k)
+    result = cauchy_ED(args, ood_dataset, method, K)
     all_results.append(result)
-    print('Result by fisher_method when id is {} and ood is {} and k is {}'.format(args.in_dataset, ood_dataset,k))
+    print('Result by cauchy_ED when id is {} and ood is {} and k is {}'.format(args.in_dataset, ood_dataset, K))
     print(result)
     print()
-metrics.print_results(all_results, args.out_datasets, f'fisher+{method}+{k}')
+metrics.print_results(all_results, args.out_datasets, f'cauchy_ED+{method}+{K}')
+print()
+
+
+all_results = []
+for ood_dataset in args.out_datasets:
+    result = fisher_TD(args, ood_dataset, method, k)
+    all_results.append(result)
+    print('Result by fisher_TD when id is {} and ood is {} and k is {}'.format(args.in_dataset, ood_dataset,K))
+    print(result)
+    print()
+metrics.print_results(all_results, args.out_datasets, f'fisher_TD+{method}+{K}')
+print()
+
+
+
+all_results = []
+for ood_dataset in args.out_datasets:
+    result = fisher_ED(args, ood_dataset, method, k)
+    all_results.append(result)
+    print('Result by fisher_ED when id is {} and ood is {} and k is {}'.format(args.in_dataset, ood_dataset,K))
+    print(result)
+    print()
+metrics.print_results(all_results, args.out_datasets, f'fisher_ED+{method}+{K}')
 print()
 
 
